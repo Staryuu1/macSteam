@@ -2,16 +2,30 @@ name: Build standalone dylib
 
 on:
   workflow_dispatch:
+    inputs:
+      steam_version:
+        description: 'Target Steam version (release name: steam-{version})'
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      STEAM_VERSION: ${{ inputs.steam_version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Steam version
+        shell: bash
+        run: |
+          if [[ ! "$STEAM_VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "Enter a numeric Steam version, for example 1788652215."
+            exit 1
+          fi
       - name: Test standalone config and installer
         run: make test-standalone
       - name: Build and bundle
@@ -22,8 +36,11 @@ jobs:
           lipo out/macsteam.dylib -verify_arch x86_64
           codesign --verify --strict out/macsteam.dylib
           tar -tzf out/macsteam-standalone.tar.gz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macsteam-standalone
-          path: out/macsteam-standalone.tar.gz
-          if-no-files-found: error
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "steam-$STEAM_VERSION" out/macsteam-standalone.tar.gz \
+            --target "$GITHUB_SHA" \
+            --title "steam-$STEAM_VERSION" \
+            --notes "Standalone macsteam bundle targeting Steam $STEAM_VERSION."

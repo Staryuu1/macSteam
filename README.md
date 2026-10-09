@@ -13,8 +13,9 @@ scripts and put Lua files in a folder. The original README is in [oldreadme.md](
 Apple Silicon only, macOS 15+. Install Steam and launch it once first.
 If you used the old config app, start with a clean Steam installation.
 
-Get the bundle from **Actions → Build standalone dylib → Run workflow**, then
-download the artifact after it finishes. Or build it yourself with `make dist`.
+Download `macsteam-standalone.tar.gz` from [Releases](https://github.com/Staryuu1/macSteam/releases).
+Pick the release named `steam-{version}` that matches your Steam version.
+Or build it yourself with `make dist`.
 
 Extract the bundle, quit Steam, and run this from the extracted folder without sudo:
 
