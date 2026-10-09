@@ -48,8 +48,8 @@ cmp "$WORK/original.cfg" "$STEAM_ROOT/steam.cfg"
 bash "$PACKAGE/scripts/install.sh"
 insert=$(/usr/libexec/PlistBuddy -c 'Print :LSEnvironment:DYLD_INSERT_LIBRARIES' "$STEAM_APP/Contents/Info.plist")
 [[ $insert == "$STEAM_APP/Contents/MacOS/macsteam.dylib:/tmp/other.dylib" ]]
-rg -q '^UnrelatedSetting=1$' "$STEAM_ROOT/steam.cfg"
-rg -q '^BootStrapperInhibitUpdateOnLaunch=enable$' "$STEAM_ROOT/steam.cfg"
+grep -q '^UnrelatedSetting=1$' "$STEAM_ROOT/steam.cfg"
+grep -q '^BootStrapperInhibitUpdateOnLaunch=enable$' "$STEAM_ROOT/steam.cfg"
 STATE="$HOME/Library/Application Support/macsteam"
 printf 'addappid(42)\n' > "$STATE/lua/user.lua"
 printf '\n# user config\n' >> "$STATE/config.yaml"
@@ -62,8 +62,8 @@ for action in install remove; do
     if bash "$PACKAGE/scripts/$action.sh" > "$WORK/missing.log" 2>&1; then
         echo "Expected missing-payload refusal: $action" >&2; exit 1
     fi
-    rg -q 'Previous installation backup exists.*is missing' "$WORK/missing.log"
-    if rg -q 'shasum:' "$WORK/missing.log"; then echo 'Unexpected raw checksum error' >&2; exit 1; fi
+    grep -q 'Previous installation backup exists.*is missing' "$WORK/missing.log"
+    if grep -q 'shasum:' "$WORK/missing.log"; then echo 'Unexpected raw checksum error' >&2; exit 1; fi
 done
 cmp "$WORK/installed.sha256" "$STATE/installer-backup/installed.sha256"
 cp "$WORK/installed.dylib" "$STEAM_APP/Contents/MacOS/macsteam.dylib"
