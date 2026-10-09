@@ -40,7 +40,31 @@ static int add_key(sx_config_t *cfg, int owner, int depot, const char *key) {
     return 0;
 }
 
-static int load_lua(const char *path, regex_t *re, regex_t *metadata, sx_config_t *cfg) {
+static int parse_u64(const char *p, regmatch_t match, uint64_t *out) {
+    const char *start = p + match.rm_so, *end = p + match.rm_eo;
+    if (*start == '"' || *start == '\'') { start++; end--; }
+    errno = 0;
+    char *tail;
+    unsigned long long value = strtoull(start, &tail, 10);
+    if (errno || tail == start || tail != end || value > UINT64_MAX) return -1;
+    *out = (uint64_t)value;
+    return 0;
+}
+
+static int add_manifest(sx_config_t *cfg, uint32_t depot, uint64_t gid) {
+    int i;
+    for (i = 0; i < cfg->manifest_count; i++)
+        if (cfg->manifests[i].depot_id == depot) break;
+    if (i == cfg->manifest_count) {
+        if (i == SX_CONFIG_MAX_MANIFESTS) return -1;
+        cfg->manifest_count++;
+    }
+    cfg->manifests[i].depot_id = depot;
+    cfg->manifests[i].gid = gid;
+    return 0;
+}
+
+static int load_lua(const char *path, regex_t *re, regex_t *manifest, regex_t *metadata, sx_config_t *cfg) {
     FILE *f = fopen(path, "r");
     if (!f) return -1;
     char line[1024];
@@ -53,11 +77,21 @@ static int load_lua(const char *path, regex_t *re, regex_t *metadata, sx_config_
         char *p = line;
         while (isspace((unsigned char)*p)) p++;
         if (!*p) continue;
+        regmatch_t m[7];
+        if (regexec(manifest, p, 5, m, 0) == 0) {
+            uint64_t depot, gid, size;
+            if (parse_u64(p, m[1], &depot) || !depot || depot > INT_MAX ||
+                parse_u64(p, m[2], &gid) || !gid ||
+                (m[4].rm_so >= 0 && parse_u64(p, m[4], &size))) { rc = -1; break; }
+            // Match the reference consumer: preserve Steam's size, even when supplied.
+            rc = add_manifest(cfg, (uint32_t)depot, gid);
+            if (rc) break;
+            continue;
+        }
         if (regexec(metadata, p, 0, NULL, 0) == 0) {
             ignored++;
             continue;
         }
-        regmatch_t m[7];
         if (regexec(re, p, 7, m, 0) != 0) { rc = -1; break; }
         errno = 0;
         long id = strtol(p + m[1].rm_so, NULL, 10);
@@ -85,7 +119,7 @@ static int load_lua(const char *path, regex_t *re, regex_t *metadata, sx_config_
     if (ferror(f)) rc = -1;
     fclose(f);
     if (rc) SX_ERR("Lua: rejected %s at line %d (unsupported syntax, invalid value, or capacity exceeded)", path, number);
-    else if (ignored) SX_WARN("Lua: %s: ignored %d setManifestid/addtoken declarations (manifest pinning and access tokens are not implemented)", path, ignored);
+    else if (ignored) SX_WARN("Lua: %s: ignored %d addtoken declarations (access tokens are not implemented)", path, ignored);
     return rc;
 }
 
@@ -97,12 +131,14 @@ int sx_config_load_lua_dir(const char *path, sx_config_t *cfg) {
     int rc = glob(pattern, 0, NULL, &files);
     if (rc == GLOB_NOMATCH) { globfree(&files); return 0; }
     if (rc) { globfree(&files); return -1; }
-    regex_t re, metadata;
-    // shortcut: declarative addappid lines only, use a Lua runtime if scripts need execution.
+    regex_t re, manifest, metadata;
+    // shortcut: declarative calls only, use a Lua runtime if scripts need execution.
     const char *syntax = "^[[:space:]]*addappid[[:space:]]*\\([[:space:]]*([0-9]+)[[:space:]]*(,[[:space:]]*([0-9]+)[[:space:]]*(,[[:space:]]*[\"']([[:xdigit:]]{64})[\"'][[:space:]]*)?)?\\)[[:space:]]*;?[[:space:]]*$";
-    if (regcomp(&re, syntax, REG_EXTENDED) != 0) { globfree(&files); return -1; }
-    const char *meta_syntax = "^[[:space:]]*(setManifestid[[:space:]]*\\([[:space:]]*[1-9][0-9]*[[:space:]]*,[[:space:]]*(\"[0-9]+\"|'[0-9]+')[[:space:]]*(,[[:space:]]*[0-9]+[[:space:]]*)?|addtoken[[:space:]]*\\([[:space:]]*[1-9][0-9]*[[:space:]]*,[[:space:]]*(\"[0-9]+\"|'[0-9]+')[[:space:]]*)\\)[[:space:]]*;?[[:space:]]*$";
-    if (regcomp(&metadata, meta_syntax, REG_EXTENDED) != 0) { regfree(&re); globfree(&files); return -1; }
+    if (regcomp(&re, syntax, REG_EXTENDED | REG_ICASE) != 0) { globfree(&files); return -1; }
+    const char *manifest_syntax = "^[[:space:]]*setManifestid[[:space:]]*\\([[:space:]]*([0-9]+)[[:space:]]*,[[:space:]]*(\"[0-9]+\"|'[0-9]+')[[:space:]]*(,[[:space:]]*([0-9]+)[[:space:]]*)?\\)[[:space:]]*;?[[:space:]]*$";
+    if (regcomp(&manifest, manifest_syntax, REG_EXTENDED | REG_ICASE) != 0) { regfree(&re); globfree(&files); return -1; }
+    const char *meta_syntax = "^[[:space:]]*addtoken[[:space:]]*\\([[:space:]]*[1-9][0-9]*[[:space:]]*,[[:space:]]*(\"[0-9]+\"|'[0-9]+')[[:space:]]*\\)[[:space:]]*;?[[:space:]]*$";
+    if (regcomp(&metadata, meta_syntax, REG_EXTENDED | REG_ICASE) != 0) { regfree(&manifest); regfree(&re); globfree(&files); return -1; }
     int result = 0;
     for (size_t i = 0; i < files.gl_pathc; i++) {
         struct stat st;
@@ -115,12 +151,14 @@ int sx_config_load_lua_dir(const char *path, sx_config_t *cfg) {
         next->package_ids = NULL;
         if (!next->app_ids) { free(next); result = -1; break; }
         if (cfg->app_count) memcpy(next->app_ids, cfg->app_ids, (size_t)cfg->app_count * sizeof(int));
-        if (load_lua(files.gl_pathv[i], &re, &metadata, next) == 0) {
+        if (load_lua(files.gl_pathv[i], &re, &manifest, &metadata, next) == 0) {
             free(cfg->app_ids);
             cfg->app_ids = next->app_ids;
             cfg->app_count = next->app_count;
             cfg->dk_count = next->dk_count;
             memcpy(cfg->depot_keys, next->depot_keys, sizeof(cfg->depot_keys));
+            cfg->manifest_count = next->manifest_count;
+            memcpy(cfg->manifests, next->manifests, sizeof(cfg->manifests));
             SX_LOG("Lua: loaded %s", files.gl_pathv[i]);
         } else {
             free(next->app_ids);
@@ -129,6 +167,7 @@ int sx_config_load_lua_dir(const char *path, sx_config_t *cfg) {
         free(next);
     }
     regfree(&re);
+    regfree(&manifest);
     regfree(&metadata);
     globfree(&files);
     return result;

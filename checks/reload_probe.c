@@ -64,6 +64,19 @@ static void expect_rejected(sx_config_t *expected) {
     sx_config_release(&cfg);
 }
 
+static void wait_for_manifest(uint64_t gid) {
+    for (int i = 0; i < 60; i++) {
+        sx_reload_apply();
+        sx_config_t *cfg = sx_config_acquire();
+        int ready = sx_config_get_manifest(cfg, 101) == gid;
+        assert(cfg->app_count == 2 && sx_config_has_app(cfg, 100));
+        sx_config_release(&cfg);
+        if (ready) return;
+        usleep(100000);
+    }
+    assert(!"manifest hot reload timed out");
+}
+
 int main(void) {
     assert(mkdtemp(root));
     char path[1024], renamed[1024];
@@ -81,6 +94,22 @@ int main(void) {
     wait_for_apps(42, 100, 2);
     assert(held->app_count == 1 && sx_config_has_app(held, 42));
     sx_config_release(&held); // Old snapshots remain alive until the last reader leaves.
+
+    write_file("lua/pin.lua", "setManifestid(101, '18446744073709551615')\n");
+    wait_for_manifest(UINT64_MAX);
+    held = sx_config_acquire();
+    write_file("lua/z.lua", "setManifestid(101, '2')\n");
+    wait_for_manifest(2);
+    assert(sx_config_get_manifest(held, 101) == UINT64_MAX);
+    sx_config_release(&held);
+    remove_file("lua/z.lua");
+    wait_for_manifest(UINT64_MAX);
+    held = sx_config_acquire();
+    write_file("lua/pin.lua", "setManifestid(101, '18446744073709551616')\n");
+    expect_rejected(held);
+    sx_config_release(&held);
+    remove_file("lua/pin.lua");
+    wait_for_manifest(0);
 
     held = sx_config_acquire();
     write_file("lua/a.lua", "addappid(200)\ninvalid()\n");

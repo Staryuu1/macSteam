@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Steam IPC startup:** Install child-process environment filtering before
+  Steam loads its client, so system helpers such as `launchctl` do not inherit
+  the injected dylib. Filter `execv`'s inherited environment too.
+- **Manifest pinning:** Apply `setManifestid(depotId, "gid" [, size])` to matching
+  primary depots of configured apps after Steam builds their dependencies.
+  Preserve Steam's size and shared-depot vector; hot reload additions, changes,
+  and removals. The native hook has static ARM64 verification and mocked tests;
+  a live installed depot matches its Lua pin. Pin logging now also records
+  manifests that already match; a live GID override is still unverified.
+- **Lua compatibility:** Accept case-insensitive declaration names. `addtoken`
+  remains unsupported and is ignored with a warning.
+
 ## [0.2.0]
 
 - **Hot reload:** Apply Lua and app/depot config changes without restarting Steam.

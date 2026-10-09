@@ -1,3 +1,6 @@
--- One declarative addappid call per line. Replace IDs/keys before use.
+-- One declarative call per line. Replace IDs/keys/GIDs before use.
 -- addappid(12345)
 -- addappid(12346, 0, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+-- setManifestid(12346, "1234567890123456789")
+-- Optional size is accepted; Steam's original size is preserved.
+-- addtoken is not implemented and is ignored with a warning.

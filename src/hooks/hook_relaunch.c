@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <crt_externs.h>
+#include <errno.h>
 
 extern int DobbyHook(void *address, void *replace_call, void **origin_call);
 extern void *DobbySymbolResolver(const char *image_name, const char *symbol_name);
@@ -128,30 +130,24 @@ static void trace_exec(const char *api, const char *path, char *const argv[], ch
            envp ? "" : " (envp NULL, cannot tell from here)");
 }
 
-static int hook_execv(const char *path, char *const argv[]) {
-    trace_exec("execv", path, argv, NULL);
-    char **nv = maybe_rewrite(argv);
-    if (nv) {
-        int rc = orig_execv(path, nv);
-        free_rewrite(nv);
-        return rc;
-    }
-    return orig_execv(path, argv);
-}
-
 static int hook_execve(const char *path, char *const argv[], char *const envp[]) {
     trace_exec("execve", path, argv, envp);
     char **nv = maybe_rewrite(argv);
-    if (nv) {
-        int rc = orig_execve(path, nv, envp);
-        free_rewrite(nv);
-        return rc;
-    }
-    char **clean_env = target_keeps_insert(path) ? NULL : strip_dyld_insert(envp);
-    int rc = orig_execve(path, argv,
+    int strip = !target_keeps_insert(path) && envp;
+    char **clean_env = strip ? strip_dyld_insert(envp) : NULL;
+    if (strip && !clean_env) { free_rewrite(nv); errno = ENOMEM; return -1; }
+    int rc = orig_execve(path, nv ? nv : argv,
                          clean_env ? (char *const *)clean_env : envp);
+    int saved_errno = errno;
     free(clean_env);
+    free_rewrite(nv);
+    errno = saved_errno;
     return rc;
+}
+
+static int hook_execv(const char *path, char *const argv[]) {
+    if (!orig_execve) return orig_execv(path, argv);
+    return hook_execve(path, argv, *_NSGetEnviron());
 }
 
 static int hook_posix_spawn(pid_t *pid, const char *path,
@@ -160,15 +156,13 @@ static int hook_posix_spawn(pid_t *pid, const char *path,
                             char *const argv[], char *const envp[]) {
     trace_exec("posix_spawn", path, argv, envp);
     char **nv = maybe_rewrite(argv);
-    if (nv) {
-        int rc = orig_posix_spawn(pid, path, fa, attr, nv, envp);
-        free_rewrite(nv);
-        return rc;
-    }
-    char **clean_env = target_keeps_insert(path) ? NULL : strip_dyld_insert(envp);
-    int rc = orig_posix_spawn(pid, path, fa, attr, argv,
+    int strip = !target_keeps_insert(path) && envp;
+    char **clean_env = strip ? strip_dyld_insert(envp) : NULL;
+    if (strip && !clean_env) { free_rewrite(nv); return ENOMEM; }
+    int rc = orig_posix_spawn(pid, path, fa, attr, nv ? nv : argv,
                               clean_env ? (char *const *)clean_env : envp);
     free(clean_env);
+    free_rewrite(nv);
     return rc;
 }
 
@@ -188,7 +182,8 @@ static void hook_one(const char *sym, void *repl, void **orig) {
 }
 
 void sx_hooks_relaunch_install(void) {
-    hook_one("execv",       (void *)hook_execv,       (void **)&orig_execv);
+    if (orig_execv || orig_execve || orig_posix_spawn) return;
     hook_one("execve",      (void *)hook_execve,      (void **)&orig_execve);
+    hook_one("execv",       (void *)hook_execv,       (void **)&orig_execv);
     hook_one("posix_spawn", (void *)hook_posix_spawn, (void **)&orig_posix_spawn);
 }

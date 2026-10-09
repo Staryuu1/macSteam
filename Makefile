@@ -103,10 +103,20 @@ $(OUT_DIR)/checks/reconcile_probe: checks/reconcile_probe.c src/core/reconcile.c
 	@mkdir -p $(dir $@)
 	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $@ checks/reconcile_probe.c src/config/config.c src/util/log.c src/util/file.c
 
-test-standalone: $(OUT_DIR)/checks/reload_probe $(OUT_DIR)/checks/reconcile_probe
+$(OUT_DIR)/checks/manifest_probe: checks/manifest_probe.c src/hooks/hook_manifest.c src/steam_types.h src/config/config.h src/config/config.c src/util/log.c src/util/file.c
+	@mkdir -p $(dir $@)
+	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $@ checks/manifest_probe.c src/config/config.c src/util/log.c src/util/file.c $(FRAMEWORKS)
+
+$(OUT_DIR)/checks/relaunch_probe: checks/relaunch_probe.c src/hooks/hook_relaunch.c src/util/log.c src/util/file.c
+	@mkdir -p $(dir $@)
+	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $@ checks/relaunch_probe.c src/util/log.c src/util/file.c
+
+test-standalone: $(OUT_DIR)/checks/reload_probe $(OUT_DIR)/checks/reconcile_probe $(OUT_DIR)/checks/manifest_probe $(OUT_DIR)/checks/relaunch_probe
 	@mkdir -p $(OUT_DIR)/checks
 	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $(OUT_DIR)/checks/lua_probe checks/lua_probe.c src/config/config.c src/config/lua.c src/util/log.c src/util/file.c
 	$(OUT_DIR)/checks/lua_probe
+	$(OUT_DIR)/checks/manifest_probe
+	$(OUT_DIR)/checks/relaunch_probe
 	$(OUT_DIR)/checks/reload_probe
 	$(OUT_DIR)/checks/reconcile_probe
 	bash checks/install_probe.sh

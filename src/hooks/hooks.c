@@ -112,7 +112,6 @@ int sx_hooks_install_all(sx_resolve_result_t *resolved, int *total_out) {
 
     if (reload_installed) sx_reload_start();
     else SX_WARN("hot reload disabled: ConfigReload hook unavailable");
-    sx_hooks_relaunch_install();
 
     if (total_out) *total_out = total;
     SX_LOG("hooks: %d/%d installed", installed, total);

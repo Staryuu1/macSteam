@@ -1,7 +1,8 @@
-// Manifest request code via opensteamtool API
+// Manifest pinning and request codes
 #include "hooks.h"
 #include "../config/config.h"
 #include "../util/log.h"
+#include "../steam_types.h"
 #include <stdint.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <CFNetwork/CFNetwork.h>
@@ -10,6 +11,39 @@
 #define MANIFEST_UA      "OpenSteamTool/1.0"
 
 static void *orig_GetManifestRequestCode = NULL;
+static void *orig_BuildDepotDependency = NULL;
+
+typedef uint32_t (*fn_BuildDepotDependency)(void *self, uint32_t app_id,
+    void *app_config, CUtlVecDepot_t *depots, CUtlVecDepot_t *shared_depots,
+    void *install_state, uint32_t *build_id, uint8_t *used_public);
+
+static uint32_t hook_BuildDepotDependency(void *self, uint32_t app_id,
+    void *app_config, CUtlVecDepot_t *depots, CUtlVecDepot_t *shared_depots,
+    void *install_state, uint32_t *build_id, uint8_t *used_public) {
+    fn_BuildDepotDependency orig = (fn_BuildDepotDependency)orig_BuildDepotDependency;
+    uint32_t result = orig(self, app_id, app_config, depots, shared_depots,
+                           install_state, build_id, used_public);
+    if (!result || sx_hook_passthrough("BuildDepotDependency")) return result;
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
+    if (!cfg || !cfg->manifest_count || !sx_config_has_app(cfg, (int)app_id)) return result;
+    if (!depots || depots->count < 0 || depots->count > depots->cap ||
+        (depots->count && !depots->base)) {
+        SX_WARN("BuildDepotDependency: invalid depot vector for app=%u; pinning skipped", app_id);
+        return result;
+    }
+    for (int i = 0; i < depots->count; i++) {
+        DepotInfo_t *entry = &depots->base[i];
+        uint64_t gid = sx_config_get_manifest(cfg, entry->depot_id);
+        if (gid) {
+            uint64_t previous = entry->manifest_id;
+            entry->manifest_id = gid;
+            SX_LOG_ONCE_KEY(entry->depot_id,
+                "BuildDepotDependency: app=%u depot=%u pinned manifest=%llu (was=%llu)",
+                app_id, entry->depot_id, (unsigned long long)gid, (unsigned long long)previous);
+        }
+    }
+    return result;
+}
 
 typedef uint32_t (*fn_GetManifestRequestCode)(void *self, uint32_t app_id,
                                                 uint32_t depot_id, uint64_t manifest_id,
@@ -92,6 +126,12 @@ static uint32_t hook_GetManifestRequestCode(void *self, uint32_t app_id,
 
 
 static sx_hook_def_t g_hooks[] = {
+    {
+        .name     = "BuildDepotDependency",
+        .sig_name = "BuildDepotDependency",
+        .hook_fn  = (void *)hook_BuildDepotDependency,
+        .orig_fn  = &orig_BuildDepotDependency,
+    },
     {
         .name     = "GetManifestRequestCode",
         .sig_name = "CAppInfo::GetManifestRequestCode",

@@ -6,6 +6,30 @@
 #include <stddef.h>
 #include "constants.h"
 
+// BuildDepotDependency output, verified against arm64 0x5a0e90 / reader 0x5a080c.
+typedef struct {
+    uint32_t depot_id;
+    uint32_t app_id;
+    uint64_t manifest_id;
+    uint64_t size;
+    uint8_t _tail[8];
+} DepotInfo_t;
+
+typedef struct {
+    DepotInfo_t *base;
+    int32_t cap;
+    int32_t grow_size;
+    int32_t count;
+    uint32_t _pad14;
+} CUtlVecDepot_t;
+
+_Static_assert(sizeof(DepotInfo_t) == 0x20, "depot entry stride");
+_Static_assert(offsetof(DepotInfo_t, manifest_id) == 0x08, "depot manifest");
+_Static_assert(offsetof(DepotInfo_t, size) == 0x10, "depot size");
+_Static_assert(offsetof(CUtlVecDepot_t, cap) == 0x08, "depot vector capacity");
+_Static_assert(offsetof(CUtlVecDepot_t, count) == 0x10, "depot vector count");
+_Static_assert(sizeof(CUtlVecDepot_t) == 0x18, "depot vector size");
+
 // CAppOwnershipInfo (out-param of CUser::CheckAppOwnership)
 typedef struct __attribute__((packed)) {
     int32_t  subId;             // 0x00

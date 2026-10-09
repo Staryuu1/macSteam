@@ -221,6 +221,13 @@ int sx_config_has_package(sx_config_t *cfg, int package_id) {
     return cfg ? contains_int(cfg->package_ids, cfg->pkg_count, package_id) : 0;
 }
 
+uint64_t sx_config_get_manifest(sx_config_t *cfg, uint32_t depot_id) {
+    if (!cfg) return 0;
+    for (int i = 0; i < cfg->manifest_count; i++)
+        if (cfg->manifests[i].depot_id == depot_id) return cfg->manifests[i].gid;
+    return 0;
+}
+
 int sx_config_app_depots(sx_config_t *cfg, int app_id, int *out, int max) {
     if (!cfg || !out || max <= 0) return 0;
     int n = 0;

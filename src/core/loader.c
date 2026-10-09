@@ -273,6 +273,8 @@ static void sx_init(void) {
         }
     }
 
+    // Steam registers its IPC service before steamclient loads; protect those children too.
+    sx_hooks_relaunch_install();
     remove_crash_sentinel();
 
     SX_LOG("macsteam loaded into %s (pid %d)", getprogname(), getpid());
