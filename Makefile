@@ -39,6 +39,7 @@ SRCS := src/core/loader.c \
         src/util/file.c \
         src/util/hex.c \
         src/config/config.c \
+        src/config/lua.c \
         src/resolver/aob.c \
         src/resolver/anchor.c \
         src/resolver/sigdb.c \
@@ -63,7 +64,7 @@ TARGET      := $(OUT_DIR)/macsteam.dylib
 OBJS     := $(patsubst %.c,$(OUT_DIR)/%.o,$(SRCS))
 DEPS     := $(OBJS:.o=.d)
 
-.PHONY: all clean rebuild test probe
+.PHONY: all clean rebuild test test-standalone dist
 
 all: $(TARGET)
 
@@ -91,56 +92,21 @@ clean:
 
 rebuild: clean all
 
-PROBE_SRC := tests/config_probe.c
-PROBE_BIN := $(OUT_DIR)/tests/config_probe
+test: test-standalone
 
-STATS_PROBE_SRC := tests/stats_resolve_probe.c
-STATS_PROBE_BIN := $(OUT_DIR)/tests/stats_resolve_probe
+test-standalone:
+	@mkdir -p $(OUT_DIR)/checks
+	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $(OUT_DIR)/checks/lua_probe checks/lua_probe.c src/config/config.c src/config/lua.c src/util/log.c src/util/file.c
+	$(OUT_DIR)/checks/lua_probe
+	bash checks/install_probe.sh
 
-AOB_PROBE_SRC := tests/aob_probe.c
-AOB_PROBE_BIN := $(OUT_DIR)/tests/aob_probe
-
-ANCHOR_PROBE_SRC := tests/anchor_probe.c
-ANCHOR_PROBE_BIN := $(OUT_DIR)/tests/anchor_probe
-
-probe:
-	@if [ -f "$(PROBE_SRC)" ]; then $(MAKE) $(PROBE_BIN); \
-	 else echo "==> No local tests, skipping probe."; fi
-
-$(PROBE_BIN): $(PROBE_SRC) src/config/config.c src/util/log.c src/util/file.c src/config/config.h
-	@mkdir -p $(dir $@)
-	$(CC) -std=c17 -Wall -Wextra -Isrc -o $@ $(PROBE_SRC) src/config/config.c src/util/log.c src/util/file.c
-	@echo "==> Built probe: $@"
-
-$(STATS_PROBE_BIN): $(STATS_PROBE_SRC) src/core/stats_cache.c src/util/log.c src/util/file.c
-	@mkdir -p $(dir $@)
-	$(CC) -std=c17 -Wall -Wextra -Isrc -o $@ $(STATS_PROBE_SRC) src/util/log.c src/util/file.c
-	@echo "==> Built probe: $@"
-
-$(AOB_PROBE_BIN): $(AOB_PROBE_SRC) src/resolver/aob.c src/util/log.c src/util/hex.c src/util/file.c src/resolver/aob.h
-	@mkdir -p $(dir $@)
-	$(CC) -std=c17 -Wall -Wextra -Isrc -o $@ $(AOB_PROBE_SRC) src/util/log.c src/util/hex.c src/util/file.c
-	@echo "==> Built probe: $@"
-
-$(ANCHOR_PROBE_BIN): $(ANCHOR_PROBE_SRC) src/resolver/anchor.c src/core/macho.c src/util/log.c src/util/file.c src/resolver/anchor.h
-	@mkdir -p $(dir $@)
-	$(CC) -std=c17 -Wall -Wextra -Isrc -o $@ $(ANCHOR_PROBE_SRC) src/util/log.c src/util/file.c
-	@echo "==> Built probe: $@"
-
-test:
-	@if [ ! -d macsteam-app/Tests ]; then echo "==> No local tests, skipping."; exit 0; fi; \
-	 $(MAKE) $(PROBE_BIN) $(STATS_PROBE_BIN) $(AOB_PROBE_BIN) $(ANCHOR_PROBE_BIN); \
-	 echo "==> Running C stats-resolver probe..."; \
-	 $(STATS_PROBE_BIN); \
-	 echo "==> Running C aob-scanner probe..."; \
-	 $(AOB_PROBE_BIN); \
-	 echo "==> Running C anchor-resolver probe..."; \
-	 MACSTEAM_SCRATCH="$(OUT_DIR)/tests" $(ANCHOR_PROBE_BIN); \
-	 echo "==> Running macsteam-app tests..."; \
-	 cd macsteam-app && \
-	   MACSTEAM_PROBE="$(CURDIR)/$(PROBE_BIN)" \
-	   MACSTEAM_CFG="$(HOME)/Library/Application Support/macsteam/config.yaml" \
-	   swift test
+dist: $(TARGET)
+	mkdir -p $(OUT_DIR)/macsteam-standalone/scripts $(OUT_DIR)/macsteam-standalone/examples
+	cp $(TARGET) README.md LICENSE $(OUT_DIR)/macsteam-standalone/
+	cp scripts/install.sh scripts/remove.sh scripts/install-common.sh $(OUT_DIR)/macsteam-standalone/scripts/
+	cp examples/config.yaml examples/example.lua $(OUT_DIR)/macsteam-standalone/examples/
+	cp -R signatures $(OUT_DIR)/macsteam-standalone/
+	tar -czf $(OUT_DIR)/macsteam-standalone.tar.gz -C $(OUT_DIR) macsteam-standalone
 
 -include $(DEPS)
 

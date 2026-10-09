@@ -1,0 +1,6 @@
+# Lua files in the lua/ directory are merged with this configuration on launch.
+Apps:
+PackageIds:
+  - 20200
+DepotKeys:
+HideWhatsNew: false

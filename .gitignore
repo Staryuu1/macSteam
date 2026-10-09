@@ -1,5 +1,4 @@
 build/
-.build/
 vendor/dobby/
 *.dylib
 *.o
@@ -12,9 +11,4 @@ scratch/
 .scratch/
 signatures_generated.json
 out/
-tests/
-
-xcuserdata/
-*.xcuserstate
-DerivedData/
 release/

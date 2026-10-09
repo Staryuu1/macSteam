@@ -1,0 +1,29 @@
+name: Build standalone dylib
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test standalone config and installer
+        run: make test-standalone
+      - name: Build and bundle
+        run: make dist
+      - name: Verify dylib
+        run: |
+          lipo out/macsteam.dylib -verify_arch arm64
+          lipo out/macsteam.dylib -verify_arch x86_64
+          codesign --verify --strict out/macsteam.dylib
+          tar -tzf out/macsteam-standalone.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macsteam-standalone
+          path: out/macsteam-standalone.tar.gz
+          if-no-files-found: error

@@ -31,6 +31,7 @@ typedef struct sx_config {
 extern _Atomic(sx_config_t *) sx_config_current;
 
 int sx_config_load(const char *path, sx_config_t *cfg);
+int sx_config_load_lua_dir(const char *path, sx_config_t *cfg);
 void sx_config_free(sx_config_t *cfg);
 int sx_config_has_app(sx_config_t *cfg, int app_id);
 int sx_config_has_package(sx_config_t *cfg, int package_id);

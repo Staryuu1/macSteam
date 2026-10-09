@@ -1,0 +1,3 @@
+-- One declarative addappid call per line. Replace IDs/keys before use.
+-- addappid(12345)
+-- addappid(12346, 0, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")

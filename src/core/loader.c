@@ -210,6 +210,14 @@ static void *loader_worker(void *unused) {
                cfg.app_count, cfg.pkg_count, cfg.dk_count);
     }
 
+    char lua_path[1024];
+    const char *home = sx_resolve_home();
+    sx_macsteam_support_path(lua_path, sizeof(lua_path), home ? home : "/tmp", "lua");
+    if (sx_config_load_lua_dir(lua_path, &cfg) != 0)
+        SX_WARN("some Lua files could not be loaded; see errors above");
+    SX_LOG("merged config: %d apps, %d packages, %d depot key groups",
+           cfg.app_count, cfg.pkg_count, cfg.dk_count);
+
     sx_sigdb_t sigdb = {0};
 
     char sig_path[512];
