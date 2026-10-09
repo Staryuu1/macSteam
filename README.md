@@ -32,9 +32,6 @@ Put your `.lua` files here:
 Open Steam normally. Restart Steam whenever you add, edit, or remove Lua files.
 You can also edit `~/Library/Application Support/macsteam/config.yaml`.
 
-Lua supports `addappid` app/depot entries. `setManifestid` and `addtoken` are
-ignored with a warning; full Lua scripts and hot reload are not supported.
-
 To uninstall, quit Steam and run:
 
 ```bash
