@@ -102,7 +102,7 @@ test-standalone:
 
 dist: $(TARGET)
 	mkdir -p $(OUT_DIR)/macsteam-standalone/scripts $(OUT_DIR)/macsteam-standalone/examples
-	cp $(TARGET) README.md LICENSE $(OUT_DIR)/macsteam-standalone/
+	cp $(TARGET) README.md oldreadme.md LICENSE $(OUT_DIR)/macsteam-standalone/
 	cp scripts/install.sh scripts/remove.sh scripts/install-common.sh $(OUT_DIR)/macsteam-standalone/scripts/
 	cp examples/config.yaml examples/example.lua $(OUT_DIR)/macsteam-standalone/examples/
 	cp -R signatures $(OUT_DIR)/macsteam-standalone/
