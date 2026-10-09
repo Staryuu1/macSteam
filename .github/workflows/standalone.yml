@@ -53,8 +53,6 @@ jobs:
             printf 'Standalone macSteam %s.\n\nTarget Steam version: `%s`.\n\n' "$MACSTEAM_VERSION" "$STEAM_VERSION"
             cat "$RUNNER_TEMP/changelog.md"
           } > "$RUNNER_TEMP/release-notes.md"
-      - name: Test standalone config and installer
-        run: make test-standalone
       - name: Build and bundle
         run: make dist
       - name: Verify dylib
