@@ -3,7 +3,7 @@
 This is an unofficial fork of [Selectively11/macSteam](https://github.com/Selectively11/macSteam).
 All credit for the original project goes to its author and contributors.
 
-This project is intended only for personal experimentation.
+This project is intended only for personal experiment.
 
 This fork removes the config app and launcher. You install the dylib with shell
 scripts and put Lua files in a folder. The original README is in [oldreadme.md](oldreadme.md).
