@@ -35,6 +35,9 @@ static void post(void *self, uint32_t callback, const void *data,
 int main(void) {
     sx_config_t *cfg = calloc(1, sizeof(*cfg));
     assert(cfg);
+    cfg->package_ids = malloc(sizeof(*cfg->package_ids));
+    cfg->app_ids = malloc(sizeof(*cfg->app_ids));
+    assert(cfg->package_ids && cfg->app_ids);
     cfg->package_ids[0] = 20200;
     cfg->pkg_count = 1;
     cfg->app_ids[0] = 42;
@@ -55,6 +58,8 @@ int main(void) {
     // Also notify removed apps when the final Lua file leaves no configured apps.
     cfg = calloc(1, sizeof(*cfg));
     assert(cfg);
+    cfg->package_ids = malloc(sizeof(*cfg->package_ids));
+    assert(cfg->package_ids);
     cfg->package_ids[0] = 20200;
     cfg->pkg_count = 1;
     sx_config_publish(cfg);
