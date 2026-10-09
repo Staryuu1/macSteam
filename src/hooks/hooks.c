@@ -1,5 +1,6 @@
 // Hook registration and installation
 #include "hooks.h"
+#include "../config/reload.h"
 #include "../util/log.h"
 #include <string.h>
 #include <stdlib.h>
@@ -51,7 +52,7 @@ static const sx_hook_module_t g_modules[] = {
 #define NUM_MODULES (sizeof(g_modules) / sizeof(g_modules[0]))
 
 int sx_hooks_install_all(sx_resolve_result_t *resolved, int *total_out) {
-    int total = 0, installed = 0;
+    int total = 0, installed = 0, reload_installed = 0;
 
     sx_hooks_depot_set_helpers(
         sx_resolve_find(resolved, "CUtlBuffer::EnsureCapacity"),
@@ -96,6 +97,7 @@ int sx_hooks_install_all(sx_resolve_result_t *resolved, int *total_out) {
 
             if (ret == 0) {
                 installed++;
+                if (strcmp(hk->name, "ConfigReload") == 0) reload_installed = 1;
                 SX_LOG("[%s] %s: %s @ %p", mod->module_name, hk->name,
                        hk->kind == SX_HOOK_INSTRUMENT ? "instrumented" : "hooked",
                        (void *)addr);
@@ -108,6 +110,8 @@ int sx_hooks_install_all(sx_resolve_result_t *resolved, int *total_out) {
         }
     }
 
+    if (reload_installed) sx_reload_start();
+    else SX_WARN("hot reload disabled: ConfigReload hook unavailable");
     sx_hooks_relaunch_install();
 
     if (total_out) *total_out = total;

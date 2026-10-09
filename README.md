@@ -14,7 +14,8 @@ Apple Silicon only, macOS 15+. Install Steam and launch it once first.
 If you used the old config app, start with a clean Steam installation.
 
 Download `macsteam-standalone.tar.gz` from [Releases](https://github.com/Staryuu1/macSteam/releases).
-Pick the release named `steam-{version}` that matches your Steam version.
+Releases use macSteam versions, such as `v0.2.0`. Check the release description
+for the compatible Steam version. See [CHANGELOG.md](CHANGELOG.md) for changes.
 Or build it yourself with `make dist`.
 
 Extract the bundle, quit Steam, and run this from the extracted folder without sudo:
@@ -29,11 +30,9 @@ Put your `.lua` files here:
 ~/Library/Application Support/macsteam/lua/
 ```
 
-Open Steam normally. Restart Steam whenever you add, edit, or remove Lua files.
-You can also edit `~/Library/Application Support/macsteam/config.yaml`.
-
-Lua supports `addappid` app/depot entries. `setManifestid` and `addtoken` are
-ignored with a warning; full Lua scripts and hot reload are not supported.
+Open Steam normally. Additional settings are in
+`~/Library/Application Support/macsteam/config.yaml`; see
+[examples/config.yaml](examples/config.yaml) for the supported format.
 
 To uninstall, quit Steam and run:
 

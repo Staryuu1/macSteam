@@ -4,11 +4,14 @@
 #include "../config/config.h"
 #include "../util/log.h"
 #include "../core/reconcile.h"
+#include "../config/reload.h"
+#include <dobby.h>
 #include "../core/session.h"
 #include "../steam_types.h"
 #include <stdint.h>
+#include <stdatomic.h>
 
-static void *g_app_mgr = NULL;
+static atomic_int g_frame_observed;
 
 void sx_hooks_apps_force_ready(void) {
     sx_apps_force_ready();
@@ -39,8 +42,7 @@ static int hook_CheckAppOwnership(void *self, uint32_t appId, void *out) {
             SX_LOG("CheckAppOwnership: captured accountId=%u", acct);
     }
 
-    if (self) g_app_mgr = self;
-    sx_reconcile_fire_library_refresh(g_app_mgr);
+    if (!g_frame_observed) sx_reconcile_fire_library_refresh(self);
 
     return sx_apps_spoof_ownership(appId, result, (AppOwnershipInfo_t *)out,
                                    sx_session_account_id());
@@ -67,8 +69,7 @@ static uint32_t hook_GetSubscribedApps(void *self, uint32_t *appids, uint32_t ma
     fn_GetSubscribedApps orig = (fn_GetSubscribedApps)orig_GetSubscribedApps;
     uint32_t count = orig(self, appids, max_apps, flags);
 
-    if (self) g_app_mgr = self;
-    sx_reconcile_fire_library_refresh(g_app_mgr);
+    if (!g_frame_observed) sx_reconcile_fire_library_refresh(self);
 
     return sx_apps_inject_subscribed(appids, max_apps, count);
 }
@@ -87,7 +88,24 @@ static int hook_BIsSubscribedApp(void *self, uint32_t appId) {
 }
 
 
+static void instrument_RunFrame(void *address, DobbyRegisterContext *ctx) {
+    (void)address;
+    g_frame_observed = 1;
+    if (sx_hook_passthrough("ConfigReload")) return;
+    // Verified ARM64 RunFrame site: x19 is CUser, immediately after CBaseUser::RunFrame.
+    void *user = (void *)(uintptr_t)ctx->general.regs.x19;
+    sx_reload_apply();
+    sx_reconcile_fire_library_refresh(user);
+}
+
 static sx_hook_def_t g_hooks[] = {
+    {
+        .name = "ConfigReload",
+        .sig_name = "CUser::RunFrame.after_base",
+        .hook_fn = (void *)instrument_RunFrame,
+        .optional = 1,
+        .kind = SX_HOOK_INSTRUMENT,
+    },
     {
         .name     = "CheckAppOwnership",
         .sig_name = "CUser::CheckAppOwnership",

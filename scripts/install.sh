@@ -57,4 +57,4 @@ ROLLBACK=0
 echo "Installed. Launch Steam normally; no macSteam Config.app is required."
 echo "Put .lua files in: $STATE/lua"
 echo "Edit config in: $STATE/config.yaml"
-echo "Restart Steam after changing files."
+echo "Lua/app changes hot reload automatically; PackageIds changes require a Steam restart."

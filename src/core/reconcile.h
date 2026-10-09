@@ -1,4 +1,4 @@
-// Late-injection recovery
+// Package-cache and library refresh
 #ifndef MACSTEAM_CORE_RECONCILE_H
 #define MACSTEAM_CORE_RECONCILE_H
 
@@ -10,9 +10,11 @@ void sx_reconcile_set_addrs(uintptr_t engine_ref_fn,
 
 void sx_reconcile_set_library_refresh_fns(uintptr_t markdirty_fn,
                                           uintptr_t recompute_fn,
-                                          uintptr_t emit_fn);
+                                          uintptr_t emit_fn,
+                                          uintptr_t post_callback_fn);
 
-void sx_reconcile_set_library_refresh_apps(const int *app_ids, int app_count);
+int sx_reconcile_set_library_refresh_apps(const int *app_ids, int app_count);
+int sx_reconcile_reload_ready(void);
 
 void sx_reconcile_arm_library_refresh(void);
 

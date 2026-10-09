@@ -67,7 +67,7 @@ static int fetch_manifest_code(uint64_t manifest_id, uint64_t *out_code) {
 static uint32_t hook_GetManifestRequestCode(void *self, uint32_t app_id,
                                               uint32_t depot_id, uint64_t manifest_id,
                                               const char *branch, uint64_t *pRequestCode) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     fn_GetManifestRequestCode orig =
         (fn_GetManifestRequestCode)orig_GetManifestRequestCode;
 

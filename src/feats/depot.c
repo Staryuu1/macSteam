@@ -54,7 +54,7 @@ static int bump_inject_count(uint32_t depot_id) {
 }
 
 int sx_depot_inject_key(void *outBuf, uint32_t depot_id) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg)
         return 0;
 

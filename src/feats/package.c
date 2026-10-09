@@ -53,7 +53,7 @@ static int utlvec_append_unique_int(CUtlVecInt_t *vec, int32_t val) {
 }
 
 void sx_pkg_inject(CPackageInfo_t *pkg) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg) return;
 
     uint32_t pkgid = pkg->packageId;

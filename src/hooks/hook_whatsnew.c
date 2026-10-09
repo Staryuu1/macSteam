@@ -60,6 +60,8 @@ static void load_flag(void) {
 static _Thread_local int g_in_flag_load;
 
 static int whatsnew_enabled(void) {
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
+    if (cfg) return cfg->hide_whats_new;
     if (g_in_flag_load)
         return 0;
     g_in_flag_load = 1;

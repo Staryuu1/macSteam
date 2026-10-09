@@ -37,7 +37,7 @@ typedef int64_t (*fn_get_ticket_impl)(void *self, uint32_t appId, void *buf,
 #define MAX_TICKET_BUF     4096
 
 static int should_forge(uint32_t app_id) {
-    sx_config_t *cfg = sx_config_current;
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!cfg || !sx_config_has_app(cfg, (int)app_id))
         return 0;
     return 1;

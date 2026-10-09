@@ -1,9 +1,13 @@
-// Late-injection recovery
+// Package-cache and library refresh
 #include "reconcile.h"
 #include "../util/log.h"
 #include "../util/file.h"
+#include "../config/config.h"
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdatomic.h>
 
 static int sx_reconcile_after_inject(void);
 static int sx_reconcile_run_pending_if_ready(void);
@@ -16,19 +20,33 @@ static fn_clearmap g_clearmap_fn = NULL;
 typedef int64_t (*fn_readdisk)(void *cache_base);
 static fn_readdisk g_readdisk_fn = NULL;
 
-typedef void (*fn_appmgr_markdirty)(void *app_mgr, uint32_t appid, char flag);
+typedef void (*fn_appmgr_markdirty)(void *app_mgr, uint32_t package_id, char flag);
 typedef void (*fn_appmgr_op)(void *app_mgr);
 static fn_appmgr_markdirty g_markdirty_fn = NULL;
 static fn_appmgr_op g_recompute_fn = NULL;
 static fn_appmgr_op g_emit_fn      = NULL;
+typedef void (*fn_post_callback)(void *user, uint32_t callback, const void *data,
+                                 uint32_t size, uint64_t call);
+static fn_post_callback g_post_callback_fn = NULL;
 
-static const int *g_refresh_app_ids = NULL;
+// Layout and callback ID verified in the bundled ARM64 EmitAppLicensesChanged.
+typedef struct {
+    uint8_t full_update, reserved[3];
+    uint32_t remaining_batches, app_count;
+    uint32_t app_ids[64];
+    uint32_t padding;
+    uint64_t flags;
+} sx_app_licenses_changed_t;
+_Static_assert(sizeof(sx_app_licenses_changed_t) == 0x118, "license callback size");
+_Static_assert(offsetof(sx_app_licenses_changed_t, flags) == 0x110, "license callback flags");
+
+static int *g_refresh_app_ids = NULL;
 static int        g_refresh_app_count = 0;
 
-// Main thread only (recompute/emit aren't thread safe, much like C itself).
-static int g_refresh_armed = 0;
+// Applied from CUser::RunFrame on Steam's user frame thread.
+static atomic_int g_refresh_armed = 0;
 
-static volatile int g_login_observed = 0;
+static atomic_int g_login_observed = 0;
 
 void sx_reconcile_set_login_observed(void) {
     if (!g_login_observed) {
@@ -41,10 +59,10 @@ int sx_reconcile_login_observed(void) {
     return g_login_observed;
 }
 
-static int g_reconcile_pending = 0;
+static atomic_int g_reconcile_pending = 0;
 
 #define APPMGR_DIRTY_COUNT_OFF 9140
-#define ENGINE_REF_ADRP_OFF   0x40
+#define ENGINE_REF_ADRP_OFF   0x48 // Verified ADRP+ADD in the bundled ARM64 build.
 #define CPKGINFOCACHE_OFF     4400
 #define CPKGINFOCACHE_MAP_OFF 8
 
@@ -63,7 +81,7 @@ static uintptr_t decode_adrp_add(uintptr_t site) {
     if (imm & (1LL << 20))
         imm -= (1LL << 21);
     uintptr_t page = site & ~(uintptr_t)0xFFF;
-    uintptr_t adrp_target = page + (uintptr_t)(imm << 12);
+    uintptr_t adrp_target = page + (uintptr_t)(imm * 4096);
 
     uint32_t adrp_rd = adrp & 0x1F;
     uint32_t add_rn  = (add >> 5) & 0x1F;
@@ -89,7 +107,7 @@ static void *resolve_csteamengine(void) {
         return NULL;
     }
     void *engine = *(void **)global_addr;
-    SX_DBG("[reconcile] qword_197B468 @ %p -> CSteamEngine %p",
+    SX_DBG("[reconcile] engine global @ %p -> CSteamEngine %p",
            (void *)global_addr, engine);
     return engine;
 }
@@ -138,38 +156,51 @@ void sx_reconcile_set_addrs(uintptr_t engine_ref_fn,
 }
 
 void sx_reconcile_set_library_refresh_fns(uintptr_t markdirty_fn,
-                                  uintptr_t recompute_fn,
-                                  uintptr_t emit_fn) {
+                                          uintptr_t recompute_fn,
+                                          uintptr_t emit_fn,
+                                          uintptr_t post_callback_fn) {
     g_markdirty_fn = (fn_appmgr_markdirty)markdirty_fn;
     g_recompute_fn = (fn_appmgr_op)recompute_fn;
     g_emit_fn      = (fn_appmgr_op)emit_fn;
-    if (!markdirty_fn || !recompute_fn || !emit_fn) {
-        SX_WARN("[reconcile] auto-refresh disabled, native trio unresolved "
-                "(markdirty=%p recompute=%p emit=%p). Reconcile still runs but "
+    g_post_callback_fn = (fn_post_callback)post_callback_fn;
+    if (!markdirty_fn || !recompute_fn || !emit_fn || !post_callback_fn) {
+        SX_WARN("[reconcile] auto-refresh disabled, native functions unresolved "
+                "(markdirty=%p recompute=%p emit=%p post=%p). Reconcile still runs but "
                 "UI needs a manual online/offline toggle",
-                (void *)markdirty_fn, (void *)recompute_fn, (void *)emit_fn);
+                (void *)markdirty_fn, (void *)recompute_fn, (void *)emit_fn, (void *)post_callback_fn);
     } else {
-        SX_DBG("[reconcile] library refresh trio set: MarkAppDirty=%p "
+        SX_DBG("[reconcile] library refresh functions set: MarkPackageDirty=%p "
                "RecomputeSubscribedApps=%p EmitAppLicensesChanged=%p",
                (void *)markdirty_fn, (void *)recompute_fn, (void *)emit_fn);
     }
 }
 
-void sx_reconcile_set_library_refresh_apps(const int *app_ids, int app_count) {
-    g_refresh_app_ids   = app_ids;
-    g_refresh_app_count = (app_ids && app_count > 0) ? app_count : 0;
-    SX_DBG("[reconcile] library refresh appid list set: %d app(s)", g_refresh_app_count);
+int sx_reconcile_reload_ready(void) {
+    return g_engine_ref_fn && g_clearmap_fn && g_readdisk_fn &&
+           g_markdirty_fn && g_recompute_fn && g_emit_fn && g_post_callback_fn &&
+           decode_adrp_add(g_engine_ref_fn + ENGINE_REF_ADRP_OFF);
+}
+
+int sx_reconcile_set_library_refresh_apps(const int *app_ids, int app_count) {
+    int *copy = NULL;
+    if (app_count > 0) {
+        copy = malloc((size_t)app_count * sizeof(int));
+        if (!copy) return -1;
+        memcpy(copy, app_ids, (size_t)app_count * sizeof(int));
+    }
+    free(g_refresh_app_ids);
+    g_refresh_app_ids = copy;
+    g_refresh_app_count = app_count;
+    return 0;
 }
 
 void sx_reconcile_arm_library_refresh(void) {
-    if (!g_markdirty_fn || !g_recompute_fn || !g_emit_fn) {
-        SX_WARN("[reconcile] cannot arm library refresh, native trio unresolved");
+    if (!g_markdirty_fn || !g_recompute_fn || !g_emit_fn || !g_post_callback_fn) {
+        SX_WARN("[reconcile] cannot arm library refresh, native functions unresolved");
         return;
     }
     g_refresh_armed = 1;
-    SX_LOG("[reconcile] library refresh armed. Native sub_B19024(x%d)+sub_B1986C+"
-           "sub_B19100 will fire once from the next main-thread "
-           "CheckAppOwnership/GetSubscribedApps", g_refresh_app_count);
+    SX_LOG("[reconcile] library refresh armed for %d app(s), waiting for CUser::RunFrame", g_refresh_app_count);
 }
 
 int sx_reconcile_fire_library_refresh(void *app_mgr) {
@@ -177,26 +208,37 @@ int sx_reconcile_fire_library_refresh(void *app_mgr) {
         return 0;
     if (!g_login_observed)
         return 0;
-    sx_reconcile_run_pending_if_ready();
-    g_refresh_armed = 0;
-
     if (!app_mgr) {
-        SX_WARN("[reconcile] library refresh dropped, no live CUserAppManager captured");
+        SX_WARN("[reconcile] library refresh waiting for a live CUser");
         return 0;
     }
+
+    if (!atomic_exchange(&g_refresh_armed, 0)) return 0; // Claim before native calls can re-enter.
+    sx_reconcile_run_pending_if_ready();
 
     SX_LOG("[reconcile] firing native library refresh on CUserAppManager=%p (x%d apps)",
            app_mgr, g_refresh_app_count);
 
-    for (int i = 0; i < g_refresh_app_count; i++) {
-        uint32_t appid = (uint32_t)g_refresh_app_ids[i];
-        g_markdirty_fn(app_mgr, appid, 0);
-    }
-    SX_LOG("[reconcile] marked %d configured appid(s) dirty (mgr+9140=%d)",
-           g_refresh_app_count, *(volatile int *)((uint8_t *)app_mgr + APPMGR_DIRTY_COUNT_OFF));
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
+    for (int i = 0; cfg && i < cfg->pkg_count; i++)
+        g_markdirty_fn(app_mgr, (uint32_t)cfg->package_ids[i], 0);
+    SX_LOG("[reconcile] marked %d package(s) dirty (user+9140=%d)",
+           cfg ? cfg->pkg_count : 0, *(volatile int *)((uint8_t *)app_mgr + APPMGR_DIRTY_COUNT_OFF));
 
     g_recompute_fn(app_mgr);
     g_emit_fn(app_mgr);
+    // Native emission only visits current package apps; include removed apps explicitly.
+    for (int i = 0; i < g_refresh_app_count;) {
+        sx_app_licenses_changed_t event = {0};
+        int count = g_refresh_app_count - i;
+        if (count > 64) count = 64;
+        event.app_count = (uint32_t)count;
+        event.remaining_batches = (uint32_t)((g_refresh_app_count - i - count + 63) / 64);
+        for (int j = 0; j < count; j++)
+            event.app_ids[j] = (uint32_t)g_refresh_app_ids[i++];
+        g_post_callback_fn(app_mgr, 0xf90be, &event, sizeof(event), 0);
+    }
+    SX_LOG("[reconcile] notified Library of %d affected app(s), including removals", g_refresh_app_count);
     return 1;
 }
 
@@ -214,7 +256,7 @@ static int sx_reconcile_run_pending_if_ready(void) {
         return 0;
     if (!g_login_observed)
         return 0;
-    g_reconcile_pending = 0;
+    if (!atomic_exchange(&g_reconcile_pending, 0)) return 0;
     SX_LOG("[reconcile] login complete. Running deferred package-cache "
            "reconcile now");
     return sx_reconcile_after_inject();
@@ -241,11 +283,6 @@ static int sx_reconcile_after_inject(void) {
 
     SX_LOG("[reconcile] ReadFromDisk re-read %lld package(s). PkgParse should have re-fired",
            (long long)npkgs);
-
-    if (!g_refresh_armed) {
-        SX_DBG("[reconcile] library refresh not armed, caller did not request the "
-               "native AppLicensesChanged_t emit (UI may need manual toggle)");
-    }
 
     return (int)npkgs;
 }

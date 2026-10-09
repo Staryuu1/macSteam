@@ -40,6 +40,7 @@ SRCS := src/core/loader.c \
         src/util/hex.c \
         src/config/config.c \
         src/config/lua.c \
+        src/config/reload.c \
         src/resolver/aob.c \
         src/resolver/anchor.c \
         src/resolver/sigdb.c \
@@ -94,15 +95,25 @@ rebuild: clean all
 
 test: test-standalone
 
-test-standalone:
+$(OUT_DIR)/checks/reload_probe: checks/reload_probe.c src/config/config.c src/config/lua.c src/config/reload.c src/util/log.c
+	@mkdir -p $(dir $@)
+	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $@ $^
+
+$(OUT_DIR)/checks/reconcile_probe: checks/reconcile_probe.c src/core/reconcile.c src/config/config.c src/util/log.c src/util/file.c
+	@mkdir -p $(dir $@)
+	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $@ checks/reconcile_probe.c src/config/config.c src/util/log.c src/util/file.c
+
+test-standalone: $(OUT_DIR)/checks/reload_probe $(OUT_DIR)/checks/reconcile_probe
 	@mkdir -p $(OUT_DIR)/checks
 	$(CC) -std=c17 -Wall -Wextra -Werror -Isrc -o $(OUT_DIR)/checks/lua_probe checks/lua_probe.c src/config/config.c src/config/lua.c src/util/log.c src/util/file.c
 	$(OUT_DIR)/checks/lua_probe
+	$(OUT_DIR)/checks/reload_probe
+	$(OUT_DIR)/checks/reconcile_probe
 	bash checks/install_probe.sh
 
 dist: $(TARGET)
 	mkdir -p $(OUT_DIR)/macsteam-standalone/scripts $(OUT_DIR)/macsteam-standalone/examples
-	cp $(TARGET) README.md oldreadme.md LICENSE $(OUT_DIR)/macsteam-standalone/
+	cp $(TARGET) README.md CHANGELOG.md oldreadme.md LICENSE $(OUT_DIR)/macsteam-standalone/
 	cp scripts/install.sh scripts/remove.sh scripts/install-common.sh $(OUT_DIR)/macsteam-standalone/scripts/
 	cp examples/config.yaml examples/example.lua $(OUT_DIR)/macsteam-standalone/examples/
 	cp -R signatures $(OUT_DIR)/macsteam-standalone/

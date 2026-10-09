@@ -1,4 +1,4 @@
-# Lua files in the lua/ directory are merged with this configuration on launch.
+# Lua files in the lua/ directory are merged with this configuration on launch and hot reload.
 Apps:
 PackageIds:
   - 20200

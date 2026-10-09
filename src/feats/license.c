@@ -50,7 +50,7 @@ static void *clone_injected_license(const void *template_lic, uint32_t pkg) {
 }
 
 static void inject_licenses_into_body(void *body) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg || g_cfg->pkg_count == 0) return;
 
     uint8_t *b = (uint8_t *)body;
@@ -128,7 +128,7 @@ static void inject_licenses_into_body(void *body) {
 }
 
 void sx_license_inject_from_packet(CProtoBufMsg_t *msg) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg || g_cfg->pkg_count == 0)
         return;
 
@@ -153,7 +153,7 @@ void sx_license_inject_from_packet(CProtoBufMsg_t *msg) {
 }
 
 void sx_license_handle_list(void *body) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
 
     if (body && g_cfg && g_cfg->pkg_count > 0 && !g_license_injected) {
         SX_LOG("HandleLicenseList: injecting %d configured package(s) into genuine body",

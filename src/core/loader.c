@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "../util/file.h"
 #include "../config/config.h"
+#include "../config/reload.h"
 #include "../resolver/resolver.h"
 #include "../resolver/sigdb.h"
 #include "../core/macho.h"
@@ -145,23 +146,21 @@ static int steamclient_already_loaded(void) {
     return 0;
 }
 
-static void arm_late_injection_reconcile(const sx_resolve_result_t *resolved,
-                                         const sx_config_t *cfg) {
+static void configure_reconcile(const sx_resolve_result_t *resolved,
+                                const sx_config_t *cfg) {
     sx_reconcile_set_addrs(
         sx_resolve_find(resolved, "CSteamEngine::SwitchAppPackageCache__anchor_for_engine_global_ref__inferred"),
         sx_resolve_find(resolved, "CPackageInfoCache::ClearMap"),
         sx_resolve_find(resolved, "CPackageInfoCache::ReadFromDisk"));
 
     sx_reconcile_set_library_refresh_fns(
-        sx_resolve_find(resolved, "CUserAppManager::MarkAppDirty"),
+        sx_resolve_find(resolved, "CUser::MarkPackageDirty"),
         sx_resolve_find(resolved, "CUserAppManager::RecomputeSubscribedApps"),
-        sx_resolve_find(resolved, "CUserAppManager::EmitAppLicensesChanged"));
+        sx_resolve_find(resolved, "CUserAppManager::EmitAppLicensesChanged"),
+        sx_resolve_find(resolved, "CUser::PostCallback"));
 
-    sx_reconcile_set_library_refresh_apps(cfg->app_ids, cfg->app_count);
-
-    sx_reconcile_arm_library_refresh();
-
-    sx_reconcile_arm_after_inject();
+    if (sx_reconcile_set_library_refresh_apps(cfg->app_ids, cfg->app_count) != 0)
+        SX_ERR("cannot allocate initial library refresh list");
 }
 
 static void *loader_worker(void *unused) {
@@ -198,25 +197,26 @@ static void *loader_worker(void *unused) {
            STEAMCLIENT_DYLIB, (unsigned long)text_base,
            text_size, (unsigned long)slide);
 
-    static sx_config_t cfg = {0};
+    sx_config_t *cfg = calloc(1, sizeof(*cfg));
+    if (!cfg) { SX_ERR("cannot allocate config"); return NULL; }
 
     char config_path[512];
     sx_file_config_path(config_path, sizeof(config_path));
 
-    if (sx_config_load(config_path, &cfg) != 0) {
+    if (sx_config_load(config_path, cfg) != 0) {
         SX_WARN("config not loaded from %s, running with no managed apps", config_path);
     } else {
         SX_LOG("config loaded: %d apps, %d packages, %d depot key groups",
-               cfg.app_count, cfg.pkg_count, cfg.dk_count);
+               cfg->app_count, cfg->pkg_count, cfg->dk_count);
     }
 
     char lua_path[1024];
     const char *home = sx_resolve_home();
     sx_macsteam_support_path(lua_path, sizeof(lua_path), home ? home : "/tmp", "lua");
-    if (sx_config_load_lua_dir(lua_path, &cfg) != 0)
+    if (sx_config_load_lua_dir(lua_path, cfg) != 0)
         SX_WARN("some Lua files could not be loaded; see errors above");
     SX_LOG("merged config: %d apps, %d packages, %d depot key groups",
-           cfg.app_count, cfg.pkg_count, cfg.dk_count);
+           cfg->app_count, cfg->pkg_count, cfg->dk_count);
 
     sx_sigdb_t sigdb = {0};
 
@@ -225,7 +225,8 @@ static void *loader_worker(void *unused) {
 
     if (sx_sigdb_load(sig_path, &sigdb) != 0) {
         SX_ERR("failed to load signature database from %s", sig_path);
-        sx_config_free(&cfg);
+        sx_config_free(cfg);
+        free(cfg);
         return NULL;
     }
 
@@ -234,7 +235,8 @@ static void *loader_worker(void *unused) {
     int resolved_count = sx_resolve_all_ex(mh, slide, dylib_path, &sigdb, &resolved);
     SX_LOG("signatures: %d/%d resolved", resolved_count, sigdb.sig_count);
 
-    sx_config_current = &cfg;
+    configure_reconcile(&resolved, cfg);
+    sx_config_publish(cfg);
 
     int total = 0;
     int installed = sx_hooks_install_all(&resolved, &total);
@@ -246,9 +248,10 @@ static void *loader_worker(void *unused) {
 
     // On late injection GetSubscribedApps already occured
     sx_hooks_apps_force_ready();
-
-    if (late_injection)
-        arm_late_injection_reconcile(&resolved, &cfg);
+    if (late_injection) {
+        sx_reconcile_arm_after_inject();
+        sx_reconcile_arm_library_refresh();
+    }
 
     sx_resolve_result_free(&resolved);
     sx_sigdb_free(&sigdb);
@@ -286,5 +289,6 @@ static void sx_init(void) {
 
 __attribute__((destructor))
 static void sx_fini(void) {
+    sx_reload_stop();
     SX_LOG("macsteam unloading, leaving hooks in place (OS reclaims on exit)");
 }

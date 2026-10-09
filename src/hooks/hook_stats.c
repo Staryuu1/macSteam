@@ -62,7 +62,7 @@ static int hook_sendAndRecv(void *self, void *send, uint32_t a2,
     if (!send_body || !recv_body)
         return orig(self, send, a2, timeOut, recv, targetType);
 
-    sx_config_t *cfg = sx_config_current;
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     int appId = (int)(*(uint64_t *)(send_body + SEND_GAME_ID_OFF) & 0xFFFFFF);
     if (!cfg || !sx_config_has_app(cfg, appId))
         return orig(self, send, a2, timeOut, recv, targetType);
@@ -114,7 +114,7 @@ static int worker_appid(uintptr_t job) {
 }
 
 static int worker_wants_redirect(uintptr_t job, uint64_t *owner_out) {
-    sx_config_t *cfg = sx_config_current;
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!cfg || sx_hook_passthrough("RequestUserStats.worker")) return 0;
     int appId = worker_appid(job);
     if (!sx_config_has_app(cfg, appId)) return 0;
@@ -155,7 +155,7 @@ static void instrument_worker_resp(void *address, void *ctx_) {
     uintptr_t job = (uintptr_t)ctx->general.x[19];
     if (!job) return;
 
-    sx_config_t *cfg = sx_config_current;
+    sx_config_t *cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!cfg || sx_hook_passthrough("RequestUserStats.worker")) return;
     int appId = worker_appid(job);
     if (!sx_config_has_app(cfg, appId)) return;

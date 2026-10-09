@@ -5,7 +5,7 @@
 #include "../util/log.h"
 
 static int should_unlock(void *iface, uint32_t app_id) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg || !sx_config_has_app(g_cfg, (int)app_id))
         return 0;
 

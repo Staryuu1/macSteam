@@ -3,7 +3,6 @@
 #define MACSTEAM_CONFIG_CONFIG_H
 
 #include <stddef.h>
-#include <stdatomic.h>
 
 #define SX_CONFIG_MAX_DK       256
 #define SX_CONFIG_MAX_DEPOTS   64
@@ -26,9 +25,13 @@ typedef struct sx_config {
     int dk_count;
 
     int hide_whats_new;
+    unsigned references; // Protected by the config mutex; published snapshots are immutable.
 } sx_config_t;
 
-extern _Atomic(sx_config_t *) sx_config_current;
+// Readers release their snapshot; publish takes ownership of a fresh heap config.
+sx_config_t *sx_config_acquire(void);
+void sx_config_release(sx_config_t **cfg);
+void sx_config_publish(sx_config_t *cfg);
 
 int sx_config_load(const char *path, sx_config_t *cfg);
 int sx_config_load_lua_dir(const char *path, sx_config_t *cfg);

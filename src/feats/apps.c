@@ -16,7 +16,7 @@ void sx_apps_force_ready(void) {
 
 int sx_apps_spoof_ownership(uint32_t appId, int origResult,
                             AppOwnershipInfo_t *info, uint32_t ownerAccountId) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
 
     if (!g_cfg || !sx_config_has_app(g_cfg, (int)appId))
         return origResult;
@@ -39,7 +39,7 @@ int sx_apps_spoof_ownership(uint32_t appId, int origResult,
 }
 
 int sx_apps_is_owned_for_depot(uint32_t appId, uint32_t depotCtxAppId, int origResult) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
 
     if (origResult || !g_cfg || !sx_config_has_app(g_cfg, (int)appId))
         return origResult;
@@ -53,7 +53,7 @@ int sx_apps_is_owned_for_depot(uint32_t appId, uint32_t depotCtxAppId, int origR
 }
 
 uint32_t sx_apps_inject_subscribed(uint32_t *appids, uint32_t max_apps, uint32_t count) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
     if (!g_cfg || g_cfg->app_count == 0) return count;
 
     int to_inject = 0;
@@ -99,7 +99,7 @@ uint32_t sx_apps_inject_subscribed(uint32_t *appids, uint32_t max_apps, uint32_t
 }
 
 int sx_apps_is_subscribed(uint32_t appId, int origResult) {
-    sx_config_t *g_cfg = sx_config_current;
+    sx_config_t *g_cfg __attribute__((cleanup(sx_config_release))) = sx_config_acquire();
 
     if (origResult || !g_cfg || !sx_config_has_app(g_cfg, (int)appId))
         return origResult;

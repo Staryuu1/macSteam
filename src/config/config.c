@@ -5,8 +5,40 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <errno.h>
+#include <limits.h>
+#include <ctype.h>
 
-_Atomic(sx_config_t *) sx_config_current = NULL;
+static sx_config_t *g_current;
+static pthread_mutex_t g_config_lock = PTHREAD_MUTEX_INITIALIZER;
+
+sx_config_t *sx_config_acquire(void) {
+    pthread_mutex_lock(&g_config_lock);
+    sx_config_t *cfg = g_current;
+    if (cfg) cfg->references++;
+    pthread_mutex_unlock(&g_config_lock);
+    return cfg;
+}
+
+void sx_config_release(sx_config_t **ptr) {
+    sx_config_t *cfg = *ptr;
+    if (!cfg) return;
+    pthread_mutex_lock(&g_config_lock);
+    int destroy = --cfg->references == 0;
+    pthread_mutex_unlock(&g_config_lock);
+    if (destroy) { sx_config_free(cfg); free(cfg); }
+    *ptr = NULL;
+}
+
+void sx_config_publish(sx_config_t *cfg) {
+    pthread_mutex_lock(&g_config_lock);
+    sx_config_t *old = g_current;
+    if (cfg) cfg->references = 1;
+    g_current = cfg;
+    pthread_mutex_unlock(&g_config_lock);
+    sx_config_release(&old);
+}
 
 enum parse_section {
     SEC_NONE = 0,
@@ -26,14 +58,6 @@ static void strip_trailing(char *s) {
     while (len > 0 && (s[len-1] == '\n' || s[len-1] == '\r' ||
                        s[len-1] == ' '  || s[len-1] == '\t'))
         s[--len] = '\0';
-}
-
-static int parse_bool(const char *s) {
-    if (!s) return 0;
-    while (*s == ' ') s++;
-    if (strcasecmp(s, "yes") == 0 || strcasecmp(s, "true") == 0 || strcmp(s, "1") == 0)
-        return 1;
-    return 0;
 }
 
 static const char *value_after_colon(const char *line) {
@@ -83,107 +107,97 @@ static int append_int(int **arr, int *count, int *cap, int value) {
     return 0;
 }
 
+static int parse_id(const char *s, int *out) {
+    errno = 0;
+    char *end;
+    long value = strtol(s, &end, 10);
+    if (errno || end == s || *end || value <= 0 || value > INT_MAX) return -1;
+    *out = (int)value;
+    return 0;
+}
+
 int sx_config_load(const char *path, sx_config_t *cfg) {
     if (!path || !cfg) return -1;
     memset(cfg, 0, sizeof(*cfg));
-
     FILE *f = fopen(path, "r");
-    if (!f) {
-        SX_ERR("config: cannot open '%s'", path);
-        return -1;
-    }
+    if (!f) { SX_ERR("config: cannot open '%s'", path); return -1; }
 
     char line[1024];
     enum parse_section section = SEC_NONE;
-    int app_cap = 0, pkg_cap = 0;
-    int dk_current_app = 0;
-
+    int app_cap = 0, pkg_cap = 0, dk_current_app = 0, number = 0, rc = 0;
     while (fgets(line, sizeof(line), f)) {
+        number++;
+        if (!strchr(line, '\n') && !feof(f)) { rc = -1; break; }
+        char *comment = strchr(line, '#');
+        if (comment) *comment = '\0';
         strip_trailing(line);
         int indent = indent_of(line);
         const char *trimmed = line + indent;
-
-        if (trimmed[0] == '\0' || trimmed[0] == '#')
-            continue;
-
+        if (!*trimmed) continue;
         if (indent == 0) {
             section = SEC_NONE;
             dk_current_app = 0;
-
-            if (section_is(trimmed, "Apps"))           { section = SEC_APPS; continue; }
-            if (section_is(trimmed, "PackageIds"))      { section = SEC_PACKAGE_IDS; continue; }
-            if (section_is(trimmed, "DepotKeys"))       { section = SEC_DEPOT_KEYS; continue; }
             const char *val = value_after_colon(trimmed);
-            if (val) {
-                if (strncmp(trimmed, "HideWhatsNew", 12) == 0)
-                    cfg->hide_whats_new = parse_bool(val);
-            }
+            if (section_is(trimmed, "Apps")) section = SEC_APPS;
+            else if (section_is(trimmed, "PackageIds")) section = SEC_PACKAGE_IDS;
+            else if (section_is(trimmed, "DepotKeys")) section = SEC_DEPOT_KEYS;
+            else if (section_is(trimmed, "HideWhatsNew") && val) {
+                if (!strcasecmp(val, "true") || !strcasecmp(val, "yes") || !strcmp(val, "1")) cfg->hide_whats_new = 1;
+                else if (strcasecmp(val, "false") && strcasecmp(val, "no") && strcmp(val, "0")) { rc = -1; break; }
+                continue;
+            } else { rc = -1; break; }
+            if (val && strcmp(val, section == SEC_DEPOT_KEYS ? "{}" : "[]")) { rc = -1; break; }
             continue;
         }
-
-        if (indent == 2) {
-            if (trimmed[0] == '-') {
-                const char *item = trimmed + 1;
-                while (*item == ' ') item++;
-                int rc = 0;
-                switch (section) {
-                case SEC_APPS:
-                    rc = append_int(&cfg->app_ids, &cfg->app_count, &app_cap, atoi(item)); break;
-                case SEC_PACKAGE_IDS:
-                    rc = append_int(&cfg->package_ids, &cfg->pkg_count, &pkg_cap, atoi(item)); break;
-                default: break;
-                }
-                if (rc != 0)
-                    SX_ERR("config: out of memory appending list item '%s' (dropped)", item);
-                continue;
-            }
-
-            if (section == SEC_DEPOT_KEYS) {
-                char key[64];
-                if (key_before_colon(line, key, sizeof(key)) == 0)
-                    dk_current_app = atoi(key);
-                continue;
-            }
+        if (indent == 2 && (section == SEC_APPS || section == SEC_PACKAGE_IDS)) {
+            int id;
+            if (*trimmed != '-' || !isspace((unsigned char)trimmed[1]) || parse_id(trimmed + 2, &id)) { rc = -1; break; }
+            rc = section == SEC_APPS
+                ? append_int(&cfg->app_ids, &cfg->app_count, &app_cap, id)
+                : append_int(&cfg->package_ids, &cfg->pkg_count, &pkg_cap, id);
+            if (rc) break;
             continue;
         }
-
-        if (indent == 4 && section == SEC_DEPOT_KEYS && dk_current_app) {
+        if (indent == 2 && section == SEC_DEPOT_KEYS) {
             char key[64];
-            if (key_before_colon(line, key, sizeof(key)) == 0) {
-                const char *val = value_after_colon(line);
-                if (val) {
-                    int dk_idx = -1;
-                    for (int i = 0; i < cfg->dk_count; i++) {
-                        if (cfg->depot_keys[i].app_id == dk_current_app) {
-                            dk_idx = i; break;
-                        }
-                    }
-                    if (dk_idx < 0 && cfg->dk_count < SX_CONFIG_MAX_DK) {
-                        dk_idx = cfg->dk_count++;
-                        cfg->depot_keys[dk_idx].app_id = dk_current_app;
-                        cfg->depot_keys[dk_idx].depot_count = 0;
-                    }
-                    if (dk_idx >= 0) {
-                        int dc = cfg->depot_keys[dk_idx].depot_count;
-                        if (dc < SX_CONFIG_MAX_DEPOTS) {
-                            cfg->depot_keys[dk_idx].depots[dc].depot_id = atoi(key);
-                            char tmp[67];
-                            snprintf(tmp, sizeof(tmp), "%s", val);
-                            strip_quotes(tmp);
-                            snprintf(cfg->depot_keys[dk_idx].depots[dc].key,
-                                     sizeof(cfg->depot_keys[dk_idx].depots[dc].key), "%s", tmp);
-                            cfg->depot_keys[dk_idx].depot_count++;
-                        }
-                    }
-                }
-            }
+            if (key_before_colon(line, key, sizeof(key)) || parse_id(key, &dk_current_app) || value_after_colon(line)) { rc = -1; break; }
             continue;
         }
+        if (indent == 4 && section == SEC_DEPOT_KEYS && dk_current_app) {
+            char key[64], hex[67];
+            int depot;
+            const char *val = value_after_colon(line);
+            if (key_before_colon(line, key, sizeof(key)) || parse_id(key, &depot) || !val || strlen(val) >= sizeof(hex)) { rc = -1; break; }
+            strcpy(hex, val);
+            strip_quotes(hex);
+            if (strlen(hex) != 64) { rc = -1; break; }
+            for (int i = 0; i < 64; i++) if (!isxdigit((unsigned char)hex[i])) rc = -1;
+            if (rc) break;
+            int i;
+            for (i = 0; i < cfg->dk_count; i++) if (cfg->depot_keys[i].app_id == dk_current_app) break;
+            if (i == cfg->dk_count) {
+                if (i == SX_CONFIG_MAX_DK) { rc = -1; break; }
+                cfg->depot_keys[cfg->dk_count++].app_id = dk_current_app;
+            }
+            int j = cfg->depot_keys[i].depot_count;
+            if (j == SX_CONFIG_MAX_DEPOTS) { rc = -1; break; }
+            cfg->depot_keys[i].depots[j].depot_id = depot;
+            memcpy(cfg->depot_keys[i].depots[j].key, hex, 65);
+            cfg->depot_keys[i].depot_count++;
+            continue;
+        }
+        rc = -1;
+        break;
     }
-
+    if (ferror(f)) rc = -1;
     fclose(f);
-    SX_LOG("config: loaded '%s'. %d apps, %d pkgs, %d depot_key groups",
-           path, cfg->app_count, cfg->pkg_count, cfg->dk_count);
+    if (rc) {
+        SX_ERR("config: rejected '%s' at line %d (invalid syntax/value or capacity exceeded)", path, number);
+        sx_config_free(cfg);
+        memset(cfg, 0, sizeof(*cfg));
+        return -1;
+    }
+    SX_LOG("config: loaded '%s'. %d apps, %d pkgs, %d depot_key groups", path, cfg->app_count, cfg->pkg_count, cfg->dk_count);
     return 0;
 }
 
