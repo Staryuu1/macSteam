@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Fix Steam IPC startup and child-process environment filtering.
-- Add manifest pinning with hot reload.
+- Add `setManifestid`.
 - Accept case-insensitive Lua declarations.
 - Warn when unsupported `addtoken` declarations are ignored.
 
