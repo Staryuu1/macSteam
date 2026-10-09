@@ -84,7 +84,7 @@ $(TARGET): $(ARM64_DYLIB) $(X86_STUB)
 	codesign -fs - $@
 	@echo "==> Built: $@"
 
-$(OUT_DIR)/%.o: %.c
+$(OUT_DIR)/%.o: %.c | $(DOBBY_STAMP)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
