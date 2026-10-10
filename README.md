@@ -18,8 +18,6 @@ Releases use macSteam versions, such as `v0.3.1`. Check the release description
 for the compatible Steam version. See [CHANGELOG.md](CHANGELOG.md) for changes.
 Or build it yourself with `make dist`.
 
-The ZIP contains `macsteam.dylib`, its `signatures/` database, and the
-install/remove scripts. The installer creates the default config when needed.
 Extract the ZIP, quit Steam, and run this from the extracted folder without sudo:
 
 ```bash
@@ -35,26 +33,6 @@ Put your `.lua` files here:
 Open Steam normally. Additional settings are in
 `~/Library/Application Support/macsteam/config.yaml`; see
 [examples/config.yaml](examples/config.yaml) for the supported format.
-
-Lua files accept `addtoken(appid, "decimal_uint64")` for PICS app metadata:
-
-```lua
-addappid(12345)
-addtoken(12345, "1234567890123456789")
-```
-
-Tokens must be quoted decimal values in `0..18446744073709551615`;
-app IDs use `1..2147483647`. A nonzero token replaces the outgoing token
-only for configured apps, including apps you already own. `addtoken` alone
-does not add an app; zero leaves Steam's token unchanged. The last declaration
-wins in filename order. Hot reload applies changes to subsequent requests;
-removing an overriding file restores the earlier declaration. Token values
-are never logged. Responses for these apps log `missing_token`, `only_public`,
-and `metadata_bytes`. An empty metadata buffer can be a metadata-only reply;
-a response without a token error alone does not prove the token was necessary.
-
-The PICS hook layout/signature is verified for Steam macOS ARM64 build
-`1788652215`. This does not grant ownership or guarantee server acceptance.
 
 ## Experimental online fix
 
