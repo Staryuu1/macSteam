@@ -256,3 +256,10 @@ int sx_config_get_depot_key_any(sx_config_t *cfg, int depot_id, char *key_out, s
     }
     return -1;
 }
+
+uint64_t sx_config_get_token(sx_config_t *cfg, uint32_t app_id) {
+    if (!cfg) return 0;
+    for (int i = 0; i < cfg->token_count; i++)
+        if (cfg->tokens[i].app_id == app_id) return cfg->tokens[i].value;
+    return 0;
+}

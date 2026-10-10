@@ -51,6 +51,7 @@ SRCS := src/core/loader.c \
         src/hooks/hook_dlc.c \
         src/hooks/hook_package.c \
         src/hooks/hook_license.c \
+        src/hooks/hook_token.c \
         src/hooks/hook_manifest.c \
         src/hooks/hook_relaunch.c \
         src/hooks/hook_stats.c \
@@ -94,12 +95,9 @@ clean:
 rebuild: clean all
 
 dist: $(TARGET)
-	mkdir -p $(OUT_DIR)/macsteam-standalone/scripts $(OUT_DIR)/macsteam-standalone/examples
-	cp $(TARGET) README.md CHANGELOG.md oldreadme.md LICENSE $(OUT_DIR)/macsteam-standalone/
-	cp scripts/install.sh scripts/remove.sh scripts/install-common.sh $(OUT_DIR)/macsteam-standalone/scripts/
-	cp examples/config.yaml examples/example.lua $(OUT_DIR)/macsteam-standalone/examples/
-	cp -R signatures $(OUT_DIR)/macsteam-standalone/
-	tar -czf $(OUT_DIR)/macsteam-standalone.tar.gz -C $(OUT_DIR) macsteam-standalone
+	rm -f $(OUT_DIR)/macsteam-standalone.zip $(OUT_DIR)/macsteam-standalone.tar.gz
+	cd $(OUT_DIR) && zip -q macsteam-standalone.zip macsteam.dylib
+	zip -q $(OUT_DIR)/macsteam-standalone.zip signatures/macos.arm64/*.json scripts/install.sh scripts/remove.sh scripts/install-common.sh
 
 -include $(DEPS)
 -include checks/Makefile

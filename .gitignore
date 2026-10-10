@@ -14,3 +14,9 @@ out/
 release/
 research/
 checks/
+
+# Local Steam configuration and caches.
+/config.yaml
+/lua/
+*.log
+*.vdf

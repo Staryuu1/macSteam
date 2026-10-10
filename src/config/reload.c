@@ -117,6 +117,8 @@ void sx_reload_apply(void) {
     }
     if (same_ids(old->app_ids, old->app_count, next->app_ids, next->app_count) &&
         old->hide_whats_new == next->hide_whats_new && old->dk_count == next->dk_count &&
+        old->token_count == next->token_count &&
+        memcmp(old->tokens, next->tokens, sizeof(old->tokens)) == 0 &&
         old->manifest_count == next->manifest_count &&
         memcmp(old->manifests, next->manifests, sizeof(old->manifests)) == 0 &&
         memcmp(old->depot_keys, next->depot_keys, sizeof(old->depot_keys)) == 0) {

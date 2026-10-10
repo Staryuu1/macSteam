@@ -34,6 +34,7 @@ static uint64_t hook_InitFromPacket(void *self, void *packet) {
     if (!packet)
         return result;
 
+    sx_hooks_token_observe_packet(self, packet);
     sx_license_inject_from_packet((CProtoBufMsg_t *)self);
     return result;
 }

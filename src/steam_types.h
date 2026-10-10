@@ -122,6 +122,39 @@ typedef struct __attribute__((packed)) {
 _Static_assert(offsetof(CProtoBufMsg_t, eMsg) == 0x20, "eMsg");
 _Static_assert(offsetof(CProtoBufMsg_t, body) == 0x30, "body");
 
+// shortcut: PICS layout is verified on build 1788652215 only; reverify on Steam updates.
+typedef struct {
+    uint8_t _pad00[0x10];
+    uint32_t has_bits;
+    int32_t cached_size;
+    uint64_t access_token;
+    uint32_t app_id;
+    uint8_t field3;
+    uint8_t _pad25[3];
+} PICSApp_t;
+
+typedef struct {
+    int32_t allocated;
+    uint32_t _pad04;
+    PICSApp_t *entries[];
+} PICSAppsRep_t;
+
+typedef struct {
+    uint8_t _pad00[0x38];
+    int32_t app_count;
+    int32_t app_capacity;
+    PICSAppsRep_t *apps;
+} PICSProductInfoRequest_t;
+
+_Static_assert(offsetof(PICSApp_t, has_bits) == 0x10, "PICS app presence");
+_Static_assert(offsetof(PICSApp_t, access_token) == 0x18, "PICS app token");
+_Static_assert(offsetof(PICSApp_t, app_id) == 0x20, "PICS app id");
+_Static_assert(sizeof(PICSApp_t) == 0x28, "PICS app size");
+_Static_assert(offsetof(PICSAppsRep_t, entries) == 0x08, "PICS repeated pointers");
+_Static_assert(offsetof(PICSProductInfoRequest_t, app_count) == 0x38, "PICS app count");
+_Static_assert(offsetof(PICSProductInfoRequest_t, app_capacity) == 0x3c, "PICS app capacity");
+_Static_assert(offsetof(PICSProductInfoRequest_t, apps) == 0x40, "PICS app Rep");
+
 // CNetPacket
 typedef struct __attribute__((packed)) {
     uint8_t  _pad00[0x08];

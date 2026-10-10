@@ -38,6 +38,10 @@ void sx_hooks_package_set_helpers(uintptr_t pkg_parse);
 int  sx_hooks_license_count(void);
 sx_hook_def_t *sx_hooks_license_defs(void);
 
+int  sx_hooks_token_count(void);
+sx_hook_def_t *sx_hooks_token_defs(void);
+void sx_hooks_token_observe_packet(void *self, void *packet);
+
 int  sx_hooks_manifest_count(void);
 sx_hook_def_t *sx_hooks_manifest_defs(void);
 

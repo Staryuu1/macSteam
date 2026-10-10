@@ -1,11 +1,13 @@
 # Changelog
 
-## Unreleased
+## [0.3.0]
 
 - Fix Steam IPC startup and child-process environment filtering.
 - Add `setManifestid`.
+- Add `addtoken` with hot reload.
 - Accept case-insensitive Lua declarations.
-- Warn when unsupported `addtoken` declarations are ignored.
+- Add PICS response diagnostics without logging tokens.
+- Package releases as ZIP with the dylib, signatures, and install/remove scripts.
 
 ## [0.2.0]
 

@@ -1,11 +1,15 @@
 {
   "schema_version": 3,
-  "profile_version": 4,
+  "profile_version": 5,
   "arch": "arm64",
   "platform": "macos",
   "steam_build": 0,
   "steam_build_date": "",
   "signatures": [
+    {
+      "name": "CProtoBufMsg::BAsyncSend",
+      "aob_hex": "FF 03 02 D1 F6 57 05 A9 F4 4F 06 A9 FD 7B 07 A9 FD C3 01 91 F3 03 01 AA F4 03 00 AA 48 2A 00 D0 08 0D 40 F9 08 01 40 B9 E8 00 00 34 80 26 00 D0 00 F0 07 91 A2 A3 00 D1 01 02 80 52 B0 2C 06 94"
+    },
     {
       "name": "CUser::CheckAppOwnership",
       "aob_hex": "?? ?? ?? D1 ?? ?? ?? A9 ?? ?? ?? A9 ?? ?? ?? A9 ?? ?? ?? A9 ?? ?? ?? A9 ?? ?? ?? A9 ?? ?? ?? 91 F4 03 02 AA FB 03 01 AA",

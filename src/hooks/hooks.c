@@ -44,6 +44,7 @@ static const sx_hook_module_t g_modules[] = {
     { "dlc",      sx_hooks_dlc_count,      sx_hooks_dlc_defs      },
     { "package",  sx_hooks_package_count,  sx_hooks_package_defs  },
     { "license",  sx_hooks_license_count,  sx_hooks_license_defs  },
+    { "token",    sx_hooks_token_count,    sx_hooks_token_defs    },
     { "manifest", sx_hooks_manifest_count, sx_hooks_manifest_defs },
     { "stats",    sx_hooks_stats_count,    sx_hooks_stats_defs    },
     { "ticket",   sx_hooks_ticket_count,   sx_hooks_ticket_defs   },

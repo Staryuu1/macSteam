@@ -11,7 +11,6 @@ codesign --verify "$SOURCE" || fail "Payload signature is invalid. Rebuild it."
 [[ -d $ROOT/signatures/macos.arm64 ]] || fail "Signature profiles are missing."
 profiles=("$ROOT"/signatures/macos.arm64/*.json)
 [[ -f ${profiles[0]} ]] || fail "No signature profiles found."
-[[ -f $ROOT/examples/config.yaml ]] || fail "Example config is missing."
 
 if [[ -d $BACKUP ]]; then
     check_backup
@@ -26,7 +25,15 @@ fi
 
 mkdir -p "$STATE/lua" "$STATE/signatures/macos.arm64"
 cp -p "${profiles[@]}" "$STATE/signatures/macos.arm64/"
-if [[ ! -e $STATE/config.yaml ]]; then cp "$ROOT/examples/config.yaml" "$STATE/config.yaml"; fi
+if [[ ! -e $STATE/config.yaml ]]; then
+    cat > "$STATE/config.yaml" <<'YAML'
+Apps:
+PackageIds:
+  - 20200
+DepotKeys:
+HideWhatsNew: false
+YAML
+fi
 cp "$SOURCE" "$PAYLOAD"
 codesign -f -s - "$PAYLOAD"
 
