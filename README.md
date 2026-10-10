@@ -14,7 +14,7 @@ Apple Silicon only, macOS 15+. Install Steam and launch it once first.
 If you used the old config app, start with a clean Steam installation.
 
 Download `macsteam-standalone.zip` from [Releases](https://github.com/Staryuu1/macSteam/releases).
-Releases use macSteam versions, such as `v0.3.0`. Check the release description
+Releases use macSteam versions, such as `v0.3.1`. Check the release description
 for the compatible Steam version. See [CHANGELOG.md](CHANGELOG.md) for changes.
 Or build it yourself with `make dist`.
 
@@ -58,28 +58,21 @@ The PICS hook layout/signature is verified for Steam macOS ARM64 build
 
 ## Experimental online fix
 
-For the native macOS Steam client, add `-onlinefix` to a game's Steam Launch
-Options. This follows the launch and IPC identity routing in
-[BetterSteamTools](https://github.com/madoiscool/BetterSteamTools/tree/4747385bdc7c92fb422e63419a5093566b3bf626):
-the game launches under Spacewar (AppID 480), while its overlay and Steam Input
-settings use the original game ID. `GetAppID` reports the original ID during
-startup and switches to 480 when the game uses the serialized networking
-interface. Add `-realappid` alongside `-onlinefix` to keep that response on the
-original ID throughout the session if the game misbehaves after startup.
+Experimental; multiplayer has not been tested yet. Uses Spacewar (AppID 480).
+Based on the onlinefix implementation in [BetterSteamTools](https://github.com/madoiscool/BetterSteamTools).
 
-Both peers need compatible game versions and the same matchmaking AppID;
-this does not connect a 480 lobby to the game's normal lobbies. Only one game
-can be active at a time. A subsequent ordinary game launch clears the routing.
-Remove the options and relaunch the game to return to normal behavior.
+1. Install the latest macsteam build and restart Steam.
+2. Open the game's **Properties → General → Launch Options**.
+3. Add `-onlinefix`, then launch the game.
 
-All five online-fix hooks must install successfully before routing is enabled.
-Signatures and ABI were checked against Steam macOS ARM64 build `1788652215`;
-local mocked checks and the build pass, but live multiplayer is unverified.
-This does not guarantee compatibility with a particular game, publisher
-servers, anti-cheat, or Steam running inside CrossOver/Wine. The Windows
-reference's game-name broadcast rewrite and stored-ticket features are not
-included. Build with `make` and reinstall with `bash scripts/install.sh` after
-quitting Steam to use the updated library and signature profile.
+If the game has startup issues, try `-onlinefix -realappid`.
+Remove these options and relaunch to disable onlinefix.
+
+Both players need compatible game versions and matchmaking through AppID 480.
+Normal game lobbies are separate. Run only one game at a time; compatibility
+with individual games and CrossOver/Wine is unverified.
+
+## Uninstall
 
 To uninstall, quit Steam and run:
 
