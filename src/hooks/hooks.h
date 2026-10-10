@@ -55,6 +55,10 @@ void sx_hooks_ticket_set_helpers(uintptr_t put_bytes, uintptr_t put_tag,
 
 void sx_hooks_ctx_set_helpers(uintptr_t getappid);
 
+int sx_hooks_onlinefix_count(void);
+sx_hook_def_t *sx_hooks_onlinefix_defs(void);
+void sx_hooks_onlinefix_set_ready(int ready);
+
 void sx_hooks_relaunch_install(void);
 
 int sx_hooks_install_all(sx_resolve_result_t *resolved, int *total_out);

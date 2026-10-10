@@ -56,6 +56,31 @@ a response without a token error alone does not prove the token was necessary.
 The PICS hook layout/signature is verified for Steam macOS ARM64 build
 `1788652215`. This does not grant ownership or guarantee server acceptance.
 
+## Experimental online fix
+
+For the native macOS Steam client, add `-onlinefix` to a game's Steam Launch
+Options. This follows the launch and IPC identity routing in
+[BetterSteamTools](https://github.com/madoiscool/BetterSteamTools/tree/4747385bdc7c92fb422e63419a5093566b3bf626):
+the game launches under Spacewar (AppID 480), while its overlay and Steam Input
+settings use the original game ID. `GetAppID` reports the original ID during
+startup and switches to 480 when the game uses the serialized networking
+interface. Add `-realappid` alongside `-onlinefix` to keep that response on the
+original ID throughout the session if the game misbehaves after startup.
+
+Both peers need compatible game versions and the same matchmaking AppID;
+this does not connect a 480 lobby to the game's normal lobbies. Only one game
+can be active at a time. A subsequent ordinary game launch clears the routing.
+Remove the options and relaunch the game to return to normal behavior.
+
+All five online-fix hooks must install successfully before routing is enabled.
+Signatures and ABI were checked against Steam macOS ARM64 build `1788652215`;
+local mocked checks and the build pass, but live multiplayer is unverified.
+This does not guarantee compatibility with a particular game, publisher
+servers, anti-cheat, or Steam running inside CrossOver/Wine. The Windows
+reference's game-name broadcast rewrite and stored-ticket features are not
+included. Build with `make` and reinstall with `bash scripts/install.sh` after
+quitting Steam to use the updated library and signature profile.
+
 To uninstall, quit Steam and run:
 
 ```bash

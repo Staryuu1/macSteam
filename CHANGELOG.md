@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.1]
+
+- Implement experimental "onlinefix" (not tested yet).
+
 ## [0.3.0]
 
 - Fix Steam IPC startup and child-process environment filtering.

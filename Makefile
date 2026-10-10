@@ -56,6 +56,7 @@ SRCS := src/core/loader.c \
         src/hooks/hook_relaunch.c \
         src/hooks/hook_stats.c \
         src/hooks/hook_ticket.c \
+        src/hooks/hook_onlinefix.c \
         src/hooks/hook_whatsnew.c \
         vendor/cJSON.c
 
